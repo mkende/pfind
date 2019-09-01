@@ -32,7 +32,9 @@ are encountered.
 
 =head1 DESCRIPTION
 
-TODO
+B<pfind> is a replacement for the standard B<find> command where the countless
+flags and options are mostly all replaced by a single option (B<--exec>) that 
+can execute arbitrary Perl code.
 
 See examples of B<pfind> in action below, in the L</EXAMPLES> section.
 
