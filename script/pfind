@@ -99,7 +99,7 @@ each directory being crawled before calling your code.
 
 This behavior can be deactivated with the opposite option B<--no-chdir>. In this
 case, during the execution of the code passed to B<--exec>, the C<$_> variable
-will contain the full path to the current file (instead of only its base name).
+will contain the full path to the current file (same as the C<$name> variable).
 That name will be absolute or relative, depending on whether the starting
 directory given on the command line has been given with an absolute or relative
 path.

@@ -12,10 +12,6 @@ use Safe;
 
 our $VERSION = '1.01';
 
-$Data::Dumper::Terse = 1;  # Don't output variable names.
-$Data::Dumper::Sortkeys = 1;  # Sort the content of the hash variables.
-$Data::Dumper::Useqq = 1;  # Use double quote for string (better escaping).
-
 {
   # A simple way to make a scalar be read-only.
   package App::Pfind::ReadOnlyVar;
@@ -98,9 +94,7 @@ sub eval_code {
   my ($code, $flag) = @_;
   my $r = $safe->reval($code);
   if ($@) {
-    die "Compilation failure in code given to --${flag}: ${@}\n";
-  } elsif ($! && $options{catch_errors}) {
-    die "Execution failure in code given to --${flag}: $!\n";
+    die "Failure in the code given to --${flag}: ${@}\n";
   }
   return $r;
 }
@@ -137,7 +131,7 @@ sub Run {
                     .'local $_ = $tmp_pfind_default;'
                     .'local $dir = $internal_pfind_dir;'
                     .'local $name = $internal_pfind_name;';
-  my $block_end = $options{catch_errors} ? '} die "$!\n" if $!;' : '';
+  my $block_end = $options{catch_errors} ? '} die "$!\n" if $!;' : '} ';
   my $all_exec_code = "sub { ${block_start}".join("${block_end} \n ${block_start}", @{$options{exec}})."${block_end} }";
   my $wrapped_code = eval_code($all_exec_code, 'exec');
   
@@ -154,6 +148,7 @@ sub Run {
       $dir_setter->set($File::Find::dir);
       $name_setter->set($File::Find::name);
       $wrapped_code->();
+      die "Failure in the code given to --exec: $!\n" if $!;
     },
   }, @inputs);
 
