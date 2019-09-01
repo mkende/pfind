@@ -30,9 +30,8 @@ WriteMakefile(
       # Goes with NO_MYMETA (which would provide the dynamic config).
       dynamic_config => 0,
       no_index => {
-        # Ignores App::Pfind itself but not child of App::Pfind.
-        package => [ 'App::Pfind' ],
-        # Ignores child of App::Pfind, but not App::Pfind itself.
+        # Ignores child of App::Pfind, but not App::Pfind itself. That package
+        # must be indexable otherwise PAUSE will not process the distribution.
         namespace => [ 'App::Pfind' ],
       },  
       prereqs => {
