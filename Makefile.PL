@@ -30,7 +30,9 @@ WriteMakefile(
       # Goes with NO_MYMETA (which would provide the dynamic config).
       dynamic_config => 0,
       no_index => {
-        # ignores child of App::Pfind, but not App::PTP itself.
+        # Ignores App::Pfind itself but not child of App::Pfind.
+        package => [ 'App::Pfind' ],
+        # Ignores child of App::Pfind, but not App::Pfind itself.
         namespace => [ 'App::Pfind' ],
       },  
       prereqs => {
