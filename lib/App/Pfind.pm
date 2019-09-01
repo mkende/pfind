@@ -10,7 +10,7 @@ use Pod::Usage;
 use File::Find;
 use Safe;
 
-our $VERSION = '1.01';
+our $VERSION = '1.02';
 
 {
   # A simple way to make a scalar be read-only.
