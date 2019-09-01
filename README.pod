@@ -1,6 +1,6 @@
 =head1 pfind - A Perl based find replacement
 
-=head1 DESCRIPTION
+=head2 DESCRIPTION
 
 B<pfind> is a replacement for the standard B<find> command where the countless
 flags and options are mostly all replaced by a single option (B<--exec>) that 
