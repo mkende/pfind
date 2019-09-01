@@ -16,8 +16,6 @@ WriteMakefile(
         'ExtUtils::MakeMaker' => '0',
     },
     BUILD_REQUIRES => {
-        'Test::More' => '0',
-        'Benchmark'  => '0',
     },
     PREREQ_PM => {
         'File::Find'            => 0,
