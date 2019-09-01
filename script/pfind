@@ -124,6 +124,28 @@ order.
 Similar to the B<--BEGIN> option, but the passed code will be executed after all
 the crawling is done.
 
+=item B<--pre> I<code>, B<--pre-process>
+
+Execute the given piece of code each time a directory is entered. The name of
+the current directory is in the variables C<$_> and C<$dir>. If B<--chdir> is in
+effect (the default), then the current directory is already set to that
+directory.
+
+This option cannot be used together with B<--follow> or B<--follow-fast>.
+
+Note: the matching option in the underlying C<File::Find> Perl library support
+modifying which files of the directory will be used. This is not supported by
+B<pfind>.
+
+=item B<--post> I<code>, B<--post-process>
+
+Execute the given piece of code just before exiting each processed directory.
+The name of the (still) current directory is in the variables C<$_> and C<$dir>.
+If B<--chdir> is in effect (the default), then the current directory is still
+set to that directory.
+
+This option cannot be used together with B<--follow> or B<--follow-fast>.
+
 =item B<-h>, B<--help>
 
 Print this help message and exits. Note: the help message printed will be much

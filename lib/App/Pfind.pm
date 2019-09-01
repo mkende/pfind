@@ -54,7 +54,7 @@ sub prune {
 
 sub reset_options {
   $safe = Safe->new();
-  $safe->deny_only(':subprocess', ':ownprocess', ':others', ':dangerous');
+  $safe->deny_only(':ownprocess', ':others', ':dangerous');
   $safe->reval('use File::Spec::Functions qw(:ALL);');
   $safe->share('$internal_pfind_dir', '$internal_pfind_name', 'prune');
 
@@ -64,12 +64,16 @@ sub reset_options {
   $options{follow} = 0;
   # Whether to follow the symlinks using a fast method that may process some files twice.
   $options{follow_fast} = 0;
-  # Block of code to execute before the main loop
+  # Blocks of code to execute before the main loop
   $options{begin} = [];
-  # Block of code to execute after the main loop
+  # Blocks of code to execute after the main loop
   $options{end} = [];
-  # Block of code to execute for each file and directory encountered
+  # Blocks of code to execute for each file and directory encountered
   $options{exec} = [];
+  # Blocks of code to execute at the beginning of the processing of each directory
+  $options{pre} = [];
+  # Blocks of code to execute at the end of the processing of each directory
+  $options{post} = [];
   # Whether to chdir in the crawled directories
   $options{chdir} = 1;
   # Whether to catch errors returned in $! in user code
@@ -87,6 +91,8 @@ sub all_options {(
   'print|p=s' => \$options{print},
   'begin|BEGIN|B=s@' => $options{begin},
   'end|END|E=s@' => $options{end},
+  'pre|pre-process=s@' => $options{pre},
+  'post|post-process=s@' => $options{post},
   'exec|e=s@' => $options{exec}
 )}
 
@@ -97,6 +103,37 @@ sub eval_code {
     die "Failure in the code given to --${flag}: ${@}\n";
   }
   return $r;
+}
+
+sub wrap_code_blocks {
+  my ($code_blocks, $default_variable_value) = @_;
+  # We're building a sub that will execute each given piece of code in a block.
+  # That way we can evaluate this code in the safe once and get the sub
+  # reference (so that it does not need to be recompiled for each file). In
+  # addition, control flow keywords (mainly next, redo and return) can be used
+  # in each block.
+  my $block_start = '{ my $tmp_pfind_default = '.$default_variable_value.'; '
+                    .'local $_ = $tmp_pfind_default;'
+                    .'local $dir = $internal_pfind_dir;'
+                    .'local $name = $internal_pfind_name;';
+  my $block_end = $options{catch_errors} ? '} die "$!\n" if $!;' : '} ';
+  my $all_exec_code = "sub { ${block_start}".join("${block_end} \n ${block_start}", @$code_blocks)."${block_end} }";
+  return eval_code($all_exec_code, 'exec');
+}
+
+sub create_wrapped_sub_executor {
+  my ($wrapped_code, $flag) = @_;
+  return sub {
+    # Instead of using our local variables, we could share the real one here:
+    # $safe->share_from('File::Find', ['$dir', '$name']);
+    # They have to be shared inside the sub as they are 'localized' each time.
+    # That approach would be slower by a small factor though.
+    $dir_setter->set($File::Find::dir);
+    $name_setter->set($File::Find::name);
+    $wrapped_code->();
+    die "Failure in the code given to --${flag}: $!\n" if $!;
+    return @_;
+  }
 }
 
 sub Run {
@@ -111,45 +148,46 @@ sub Run {
   if (not @{$options{exec}}) {
     $options{exec} = ['print'];
   }
-    
+  
   if ($options{follow} && $options{follow_fast}) {
     die "The --follow and --follow-fast options cannot be used together.\n";
   }
-  
+  my $follow_mode = $options{follow} || $options{follow_fast};
+  if (@{$options{pre}} && $follow_mode) {
+    die "The --pre-process option cannot be used with --follow or --follow-fast.\n";
+  }
+  if (@{$options{post}} && $follow_mode) {
+    die "The --post-process option cannot be used with --follow or --follow-fast.\n";
+  }
+
   $\ = $options{print};
   
   for my $c (@{$options{begin}}) {
     eval_code($c, 'BEGIN');
   }
   
-  # We're building a sub that will execute each given piece of code in a block.
-  # That way we can evaluate this code in the safe once and get the sub
-  # reference (so that it does not need to be recompiled for each file). In
-  # addition, control flow keywords (mainly next, redo and return) can be used
-  # in each block.
-  my $block_start = '{ my $tmp_pfind_default = $_; '
-                    .'local $_ = $tmp_pfind_default;'
-                    .'local $dir = $internal_pfind_dir;'
-                    .'local $name = $internal_pfind_name;';
-  my $block_end = $options{catch_errors} ? '} die "$!\n" if $!;' : '} ';
-  my $all_exec_code = "sub { ${block_start}".join("${block_end} \n ${block_start}", @{$options{exec}})."${block_end} }";
-  my $wrapped_code = eval_code($all_exec_code, 'exec');
+  my $wrapped_exec = wrap_code_blocks($options{exec}, '$_');
+  # The $_ variable inside these method will be set to $File::Find::dir (as the
+  # real $_ does not contain anything useful in that case).
+  my $pre_option;
+  if (@{$options{pre}}) {
+    my $wrapped_pre = wrap_code_blocks($options{pre}, '$internal_pfind_dir');
+    $pre_option = create_wrapped_sub_executor($wrapped_pre, 'pre-process');
+  }
+  my $post_option;
+  if (@{$options{post}}) {
+    my $wrapped_post = wrap_code_blocks($options{post}, '$internal_pfind_dir');
+    $post_option = create_wrapped_sub_executor($wrapped_post, 'post-process');
+  }
   
   find({
     bydepth => $options{depth_first},
     follow => $options{follow},
     follow_fast => $options{follow_fast},
     no_chdir => !$options{chdir},
-    wanted => sub {
-      # Instead of using our local variables, we could share the real one here:
-      # $safe->share_from('File::Find', ['$dir', '$name']);
-      # They have to be shared inside the sub as they are 'localized' each time.
-      # That approach would be slower by a small factor though.
-      $dir_setter->set($File::Find::dir);
-      $name_setter->set($File::Find::name);
-      $wrapped_code->();
-      die "Failure in the code given to --exec: $!\n" if $!;
-    },
+    wanted => create_wrapped_sub_executor($wrapped_exec, 'exec'),
+    preprocess => $pre_option,
+    postprocess => $post_option,
   }, @inputs);
 
   for my $c (@{$options{end}}) {
