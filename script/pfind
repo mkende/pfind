@@ -45,20 +45,28 @@ See examples of B<pfind> in action below, in the L</EXAMPLES> section.
 Execute the given piece of code for each file and directory encountered by the
 program. The program will C<chdir> into each directory being crawled before
 calling your code and the C<$_> variable will contain the base name of the
-current file or directory.
+current file or directory. In addition, the C<$dir> variable will contain the
+directory name of the current file and C<$name> will contain the full name of
+the file (more or less C<$dir> concatenated with C<$_>).
+
+The code can also call the C<prune> method to skip recursing into the current
+directory. This has no effect if called while looking at a file. This cannot be
+used if the B<--depth-first> option is passed. This does not interupt the
+execution of the code for the current directory or file.
 
 You will typically uses the code to perform tests on the given file and some
 sort of actions depending on the result of the tests. See L</EXAMPLES> below.
 
-This option can be passed multiple time. However, multiple pieces of code given
+This option can be passed multiple times. However, multiple pieces of code given
 to this option will not be independant: they will share the same variables and
 if C<return> is called by a piece of code, no more code will be executed for the
 current file. However the keyword C<next> can be used to jump to the next piece
 of code to be executed.
 
-One exception is that the C<$_> variable is saved and each piece of coce will 
-initially see the same value. That value can be modified but the following
-pieces of code will not see the modification.
+One exception is that the C<$_>, C<$dir>, and C<$name> variables are saved and
+each piece of coce will initially see the correct values. The variables can be
+modified but the next pieces of code executed after the current one will not see
+the modification.
 
 =item B<-d>, B<--depth-first>
 
@@ -104,7 +112,17 @@ C<$\> variable in Perl.
 
 =item B<-B> I<code>, B<--BEGIN>
 
+Specify a piece of code that is executed before starting to crawl the
+directories. That code can set-up variables and functions to be used later by
+the code passed to B<--exec>.
+
+This option can be passed several times. Each piece of code will be called in
+order.
+
 =item B<-E> I<code>, B<--END>
+
+Similar to the B<--BEGIN> option, but the passed code will be executed after all
+the crawling is done.
 
 =item B<-h>, B<--help>
 
@@ -131,6 +149,16 @@ files is printed. With the B<--no-chdir> option, the full name of the files is
 printed:
 
   pfind --no-chdir dir1 dir2 dir3
+
+This example will print the name of all the files and directories that it sees
+but it will skip the content of hidden directories and hidden directories
+themselves:
+
+  pfind -e 'if (/^\..+/) { prune; return }' -e 'print $name' dir...
+
+This example prints the name of all symbolic links whose targets are invalid:
+
+  pfind -e 'print $name if -l && !-e'
 
 =head1 AUTHOR
 

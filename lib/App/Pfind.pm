@@ -10,11 +10,40 @@ use Pod::Usage;
 use File::Find;
 use Safe;
 
-our $VERSION = '1.00';
+our $VERSION = '1.01';
 
 $Data::Dumper::Terse = 1;  # Don't output variable names.
 $Data::Dumper::Sortkeys = 1;  # Sort the content of the hash variables.
 $Data::Dumper::Useqq = 1;  # Use double quote for string (better escaping).
+
+{
+  # A simple way to make a scalar be read-only.
+  package App::Pfind::ReadOnlyVar;
+  sub TIESCALAR {
+    my ($class, $value) = @_;
+    return bless \$value, $class;
+  }
+  sub FETCH {
+    my ($self) = @_;
+    return $$self;
+  }
+  # Does nothing. We could warn_or_die, but it does not play well with the fact
+  # that we are inside the safe.
+  sub STORE {}
+  # Secret hidden methods for our usage only. These methods can't be used
+  # through the tie-ed variable, but only through the object returned by the
+  # call to tie.
+  sub set {
+    my ($self, $value) = @_;
+    $$self = $value;
+  }
+}
+
+# These two variables are shared with the user code. They have this name as a
+# localized copy is passed to the code.
+our ($internal_pfind_dir, $internal_pfind_name);
+my $dir_setter = tie $internal_pfind_dir, 'App::Pfind::ReadOnlyVar';
+my $name_setter = tie $internal_pfind_name, 'App::Pfind::ReadOnlyVar';
 
 # A Safe object, created in reset_options.
 my $safe;
@@ -22,11 +51,16 @@ my $safe;
 # This hash contains options that are global for the whole program.
 my %options;
 
+sub prune {
+  die "The prune command cannot be used when --depth-first is set.\n" if $options{depth_first};
+  $File::Find::prune = 1;
+}
+
 sub reset_options {
   $safe = Safe->new();
   $safe->deny_only(':subprocess', ':ownprocess', ':others', ':dangerous');
   $safe->reval('use File::Spec::Functions qw(:ALL);');
-  $safe->share_from('File::Find', ['dir', 'name']);
+  $safe->share('$internal_pfind_dir', '$internal_pfind_name', 'prune');
 
   # Whether to process the content of a directory before the directory itself.
   $options{depth_first} = 0;
@@ -99,10 +133,12 @@ sub Run {
   # reference (so that it does not need to be recompiled for each file). In
   # addition, control flow keywords (mainly next, redo and return) can be used
   # in each block.
-  my $block_start = '{ my $tmp_default = $_; local $_ = $tmp_default; ';
+  my $block_start = '{ my $tmp_pfind_default = $_; '
+                    .'local $_ = $tmp_pfind_default;'
+                    .'local $dir = $internal_pfind_dir;'
+                    .'local $name = $internal_pfind_name;';
   my $block_end = $options{catch_errors} ? '} die "$!\n" if $!;' : '';
   my $all_exec_code = "sub { ${block_start}".join("${block_end} \n ${block_start}", @{$options{exec}})."${block_end} }";
-  print $all_exec_code."\n";
   my $wrapped_code = eval_code($all_exec_code, 'exec');
   
   find({
@@ -110,7 +146,15 @@ sub Run {
     follow => $options{follow},
     follow_fast => $options{follow_fast},
     no_chdir => !$options{chdir},
-    wanted => $wrapped_code,
+    wanted => sub {
+      # Instead of using our local variables, we could share the real one here:
+      # $safe->share_from('File::Find', ['$dir', '$name']);
+      # They have to be shared inside the sub as they are 'localized' each time.
+      # That approach would be slower by a small factor though.
+      $dir_setter->set($File::Find::dir);
+      $name_setter->set($File::Find::name);
+      $wrapped_code->();
+    },
   }, @inputs);
 
   for my $c (@{$options{end}}) {
