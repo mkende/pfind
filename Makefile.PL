@@ -20,16 +20,11 @@ WriteMakefile(
         'Benchmark'  => '0',
     },
     PREREQ_PM => {
-        'Cwd'                   => 0,
-        'Data::Dumper'          => 0,
-        'Exporter'              => 0,
         'File::Find'            => 0,
         'File::Spec::Functions' => 0,
         'Getopt::Long'          => 0,
-        'List::Util'            => 0,
         'Pod::Usage'            => 0,
         'Safe'                  => 0,
-        'Scalar::Util'          => 0,
     },
     NO_MYMETA => 1,
     META_MERGE => {
@@ -44,7 +39,6 @@ WriteMakefile(
         test => {
           suggests => {
             'Test::Pod'   => 1.22,
-            'Time::HiRes' => 0,
           },
         },
       },

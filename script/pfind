@@ -38,6 +38,11 @@ See examples of B<pfind> in action below, in the L</EXAMPLES> section.
 
 =head1 OPTIONS
 
+All the options below can be abbreviated down to uniqueness and be supplied in
+any order. Input files and directories can be mixed in with the options. Options
+processing can be stopped with the B<--> flag, all remaining arguments will be
+considered input files.
+
 =over 4
 
 =item B<-e> I<code>, B<--exec>
