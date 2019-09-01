@@ -1,0 +1,172 @@
+#!/usr/bin/perl
+
+use 5.022;
+use strict;
+use warnings;
+
+use App::Pfind;
+
+our $VERSION = $App::Pfind::VERSION;
+
+App::Pfind::Run(\@ARGV);
+exit 0;
+
+# PODNAME: pfind
+# ABSTRACT: A Perl based find replacement
+ 
+__DATA__
+
+=pod
+
+=head1 NAME
+
+B<pfind> - A Perl based I<find> replacement
+
+=head1 SYNOPSIS
+
+  pfind dir1 dir2 ... [--exec perl_code]
+
+The program recursively crawls through all the directories listed on its command
+line and execute some piece of perl code on each files and directories that
+are encountered.
+
+=head1 DESCRIPTION
+
+TODO
+
+See examples of B<pfind> in action below, in the L</EXAMPLES> section.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-e> I<code>, B<--exec>
+
+Execute the given piece of code for each file and directory encountered by the
+program. The program will C<chdir> into each directory being crawled before
+calling your code and the C<$_> variable will contain the base name of the
+current file or directory.
+
+You will typically uses the code to perform tests on the given file and some
+sort of actions depending on the result of the tests. See L</EXAMPLES> below.
+
+This option can be passed multiple time. However, multiple pieces of code given
+to this option will not be independant: they will share the same variables and
+if C<return> is called by a piece of code, no more code will be executed for the
+current file. However the keyword C<next> can be used to jump to the next piece
+of code to be executed.
+
+One exception is that the C<$_> variable is saved and each piece of coce will 
+initially see the same value. That value can be modified but the following
+pieces of code will not see the modification.
+
+=item B<-d>, B<--depth-first>
+
+When this option is passed, the code given to B<--exec> will be called first for
+the content of a directory and then for the directory itself (this is a depth
+first approach). By default, the code is executed first for a directory and then
+for its content.
+
+Using this option might be required if you're planning on changing the name of a
+directory.
+
+The opposite option is B<--no-depth-first> (or B<--nod>).
+
+=item B<-f>, B<--follow>
+
+When this option is passed, symlinks are followed (by default they are treated
+as files but not followed).
+
+=item B<-ff>, B<--follow-fast>
+
+Same as B<--follow> but faster. However, with this option, it is possible that
+some files will be processed twice if the symlinks for some kind of cycles.
+
+The B<--follow> and B<--follow-fast> options are mutually exclusive.
+
+=item B<--chdir>
+
+When this option is set (which is the default), the program will C<chdir> into
+each directory being crawled before calling your code.
+
+This behavior can be deactivated with the opposite option B<--no-chdir>. In this
+case, during the execution of the code passed to B<--exec>, the C<$_> variable
+will contain the full path to the current file (instead of only its base name).
+That name will be absolute or relative, depending on whether the starting
+directory given on the command line has been given with an absolute or relative
+path.
+
+=item B<-p> I<text>, B<--print>
+
+Print the argument of this function after each call of the Perl C<print>
+function. This defaults to a new-line. Technically this option is setting the
+C<$\> variable in Perl.
+
+=item B<-B> I<code>, B<--BEGIN>
+
+=item B<-E> I<code>, B<--END>
+
+=item B<-h>, B<--help>
+
+Print this help message and exits. Note: the help message printed will be much
+improved if you have the B<perldoc> program installed (sometimes from a
+B<perl-doc> package).
+
+=item B<--version>
+
+Print the version of the program and exit.
+
+=back
+
+=head1 EXAMPLES
+
+A default invocation of the program without arguments other than directories and
+files will as the B<find> program, printing the recursive content of all the
+listed directories and files:
+
+  pfind dir1 dir2 dir3
+
+By default, pfind C<chdir> into each directory, so the only the base name of the
+files is printed. With the B<--no-chdir> option, the full name of the files is
+printed:
+
+  pfind --no-chdir dir1 dir2 dir3
+
+=head1 AUTHOR
+
+This program has been written by L<Mathias Kende|mailto:mathias@cpan.org>.
+
+=head1 LICENCE
+
+Copyright 2019 Mathias Kende
+
+This program is distributed under the MIT (X11) License:
+L<http://www.opensource.org/licenses/mit-license.php>
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+=head1 SEE ALSO
+
+L<perl(1)>, L<find(1)>, L<exec(1)>,
+L<File::Find|https://perldoc.perl.org/file/find.html>
+
+=cut
