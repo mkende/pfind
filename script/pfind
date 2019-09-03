@@ -251,6 +251,10 @@ This example prints the name of all symbolic links whose targets are invalid:
 
   pfind -e 'print $name if -l && !-e'
 
+Using the B<--type> option, the same example could be written:
+
+  pfind -t l -e 'print $name unless -e'
+
 Rename all the file in the current folder, replacing C<_> by C<-> but do not
 recurse into sub-directories:
 
