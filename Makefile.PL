@@ -20,6 +20,7 @@ WriteMakefile(
     },
     PREREQ_PM => {
         'Data::Dumper'          => 0,
+        'Fcntl'                 => 0,
         'File::Copy'            => 0,
         'File::Find'            => 0,
         'File::Spec::Functions' => 0,

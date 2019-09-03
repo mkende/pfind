@@ -87,6 +87,25 @@ directory.
 
 The opposite option is B<--no-depth-first> (or B<--nod>).
 
+=item B<-t> I<types>, B<--type>
+
+Filter the files on which the actions should be executed. This argument can
+receive a list of characters defining type of files to accept. There should be
+no separators. Alternatively the option can be passed multiple times.
+
+Valid values for I<types>: C<f>, a regular file; C<d>, a directory; C<l>, a
+symbolic link; C<b>, a block special file; C<c>, a character special file; C<p>,
+a fifo file (pipe); C<s>, a socket.
+
+Note that these types are not mutually exclusive. If multiple types are passed,
+only files that match all the types will be accepted. A type can be given in
+upper-case to reverse its meaning (excluding the files of that type).
+
+When a file is filtered, the code given to B<--exec> will not be executed for
+that file but, if this file is a directory, the B<--pre> and B<--post> code will
+still execute. Filtering directories will also not prevent from recursing in
+them.
+
 =item B<-f>, B<--follow>
 
 When this option is passed, symlinks are followed (by default they are treated

@@ -5,11 +5,12 @@ use strict;
 use warnings;
 
 use Data::Dumper;
+use Fcntl ':mode';
+use File::Find;
+use File::Path qw(make_path remove_tree);
 use Getopt::Long qw(GetOptionsFromArray :config auto_abbrev no_ignore_case
                     permute auto_version);
 use Pod::Usage;
-use File::Find;
-use File::Path qw(make_path remove_tree);
 use Safe;
 
 our $VERSION = '1.04';
@@ -118,6 +119,8 @@ sub reset_options {
   $options{pre} = [];
   # Blocks of code to execute at the end of the processing of each directory
   $options{post} = [];
+  # Type of files that are processed. Note that after the reading of the option, this is concatenated in a string.
+  $options{type} = [];
   # Whether to chdir in the crawled directories
   $options{chdir} = 1;
   # Whether to catch errors returned in $! in user code
@@ -133,6 +136,7 @@ sub all_options {(
   'depth-first|depth|d!' => \$options{depth_first},
   'follow|f!' => \$options{follow},
   'follow-fast|ff!' => \$options{follow_fast},
+  'type|t=s@' => $options{type},
   'chdir!' => \$options{chdir},
   'print|p=s' => \$options{print},
   'begin|BEGIN|B=s@' => $options{begin},
@@ -185,6 +189,32 @@ sub run_wrapped_sub {
   die "Failure in the code given to --${flag}: $!\n" if $!;
 }
 
+my %file_mode = (
+    f => S_IFREG,   # regular file
+    d => S_IFDIR,   # directory
+    l => S_IFLNK,   # symbolic link
+    b => S_IFBLK,   # block special file
+    c => S_IFCHR,   # character special file
+    p => S_IFIFO,   # fifo (pipe)
+    s => S_IFSOCK,  # socket
+    # S_IFWHT and S_ENFMT are not supported (they're Sys-V specific features)
+  );
+
+sub should_skip_file {
+  my ($relative_file_name, $full_file_name) = @_;
+  return 0 unless %{$options{type}};
+  # When executing find in follow mode, the current file has already been
+  # stat-ed (this is guaranteed by find), so we can re-use the value using `_`.
+  my (undef, undef, $mode) = ($options{follow} || $options{follow_fast}) ? stat(_) : stat($relative_file_name);
+  for my $m (keys(%{$options{type}})) {
+    if (($mode & $file_mode{$m}) xor $options{type}{$m}) {
+      print STDERR "Skipping '$full_file_name' due to '$m' type" if $options{verbose};
+      return 1;
+    }
+  }
+  return 0;
+}
+
 sub Run {
   my ($argv) = @_;
   
@@ -202,6 +232,8 @@ sub Run {
     $options{exec} = ['print'];
   }
   
+  $options{type} = { map { lc() => ($_ eq lc()) } split(//, join('', @{$options{type}})) };
+  
   print STDERR "options = ".Dumper({%options}) if $options{verbose} > 1;
   
   if ($options{follow} && $options{follow_fast}) {
@@ -213,6 +245,9 @@ sub Run {
   }
   if (@{$options{post}} && $follow_mode) {
     die "The --post-process option cannot be used with --follow or --follow-fast.\n";
+  }
+  if (join('', keys %{$options{type}}) !~ /^[fdlpsbc]+$/) {
+    die "Unsupported value for the --type option.\n";
   }
 
   $\ = $options{print};
@@ -240,6 +275,7 @@ sub Run {
     no_chdir => !$options{chdir},
     wanted => sub {
       print STDERR "Looking at file: $File::Find::name" if $options{verbose};
+      return if should_skip_file($_, $File::Find::name);
       run_wrapped_sub($wrapped_exec, 'exec');
     },
     preprocess => sub {
