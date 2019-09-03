@@ -1,6 +1,6 @@
 .git/
 .gitignore
-App-Pfind-*
+Pfind-*
 blib/
 Makefile$
 Makefile.old

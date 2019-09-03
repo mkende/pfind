@@ -4,13 +4,19 @@ use 5.022;
 use strict;
 use warnings;
 
+use Data::Dumper;
 use Getopt::Long qw(GetOptionsFromArray :config auto_abbrev no_ignore_case
                     permute auto_version);
 use Pod::Usage;
 use File::Find;
+use File::Path qw(make_path remove_tree);
 use Safe;
 
-our $VERSION = '1.03';
+our $VERSION = '1.04';
+
+$Data::Dumper::Terse = 1;  # Don't output variable names.
+$Data::Dumper::Sortkeys = 1;  # Sort the content of the hash variables.
+$Data::Dumper::Useqq = 1;  # Use double quote for string (better escaping).
 
 {
   # A simple way to make a scalar be read-only.
@@ -47,16 +53,54 @@ my $safe;
 # This hash contains options that are global for the whole program.
 my %options;
 
+# Methods that are shared with the safe:
+
 sub prune {
   die "The prune command cannot be used when --depth-first is set.\n" if $options{depth_first};
   $File::Find::prune = 1;
+}
+# The prototype means that $_ will be used if nothing else is passed.
+sub mkdir(_;@) {
+  my $err;
+  make_path(@_, { error => \$err });
+  # make_path sets $! on success (as it test the existance of the file).
+  undef $!;
+  $! = join(', ', @$err) if @$err;
+}
+sub rmdir(_;@) {
+  for my $d (@_) {
+    CORE::rmdir($d);
+  }
+}
+# A safe 'rm' that does not recurse into directories.
+sub rm(_;@) {
+  for my $f (@_) {
+    if (-d $f) {
+      CORE::rmdir($f);
+      return if $!;
+    } else {
+      my $err;
+      remove_tree($f, { error => \$err });
+      undef $!;
+      $! = join(', ', @$err) if @$err;
+    }
+  }
+}
+sub rmtree(_;@) {
+  my $err;
+  remove_tree(@_, { error => \$err });
+  undef $!;
+  $! = join(', ', @$err) if @$err;
 }
 
 sub reset_options {
   $safe = Safe->new();
   $safe->deny_only(':ownprocess', ':others', ':dangerous');
   $safe->reval('use File::Spec::Functions qw(:ALL);');
-  $safe->share('$internal_pfind_dir', '$internal_pfind_name', 'prune');
+  $safe->reval('use File::Copy qw(cp mv)');
+  $safe->share('$internal_pfind_dir', '$internal_pfind_name', 'prune', 'mkdir',
+               'rmdir', 'rm', 'rmtree');
+  $safe->share_from('main', ['*STDERR']);
 
   # Whether to process the content of a directory before the directory itself.
   $options{depth_first} = 0;
@@ -80,6 +124,8 @@ sub reset_options {
   $options{catch_errors} = 1;  # non-modifiable for now.
   # Add this string after each print statement
   $options{print} = "\n";
+  # If true, debug message are printed on STDERR
+  $options{verbose} = 0;
 }
 
 sub all_options {(
@@ -93,7 +139,8 @@ sub all_options {(
   'end|END|E=s@' => $options{end},
   'pre|pre-process=s@' => $options{pre},
   'post|post-process=s@' => $options{post},
-  'exec|e=s@' => $options{exec}
+  'exec|e=s@' => $options{exec},
+  'verbose|v|V+' => \$options{verbose},
 )}
 
 sub eval_code {
@@ -106,34 +153,36 @@ sub eval_code {
 }
 
 sub wrap_code_blocks {
-  my ($code_blocks, $default_variable_value) = @_;
+  my ($code_blocks, $default_variable_value, $flag) = @_;
   # We're building a sub that will execute each given piece of code in a block.
   # That way we can evaluate this code in the safe once and get the sub
   # reference (so that it does not need to be recompiled for each file). In
   # addition, control flow keywords (mainly next, redo and return) can be used
   # in each block.
-  my $block_start = '{ my $tmp_pfind_default = '.$default_variable_value.'; '
-                    .'local $_ = $tmp_pfind_default;'
-                    .'local $dir = $internal_pfind_dir;'
-                    .'local $name = $internal_pfind_name;';
+  my $block_start = '{ my $tmp_pfind_default = '.$default_variable_value.'; ';
+  $block_start .= "print { *STDERR } 'Executing code $flag:'.\$internal_pfind_block_count++;" if $options{verbose};
+  $block_start .= 'local $_ = $tmp_pfind_default;'
+                  .'local $dir = $internal_pfind_dir;'
+                  .'local $name = $internal_pfind_name;';
   my $block_end = $options{catch_errors} ? '} die "$!\n" if $!;' : '} ';
-  my $all_exec_code = "sub { ${block_start}".join("${block_end} \n ${block_start}", @$code_blocks)."${block_end} }";
+  my $all_exec_code = 'sub { my $internal_pfind_block_count = 1;'
+                      .${block_start}.join("${block_end} \n ${block_start}", @$code_blocks).${block_end}
+                      .' }';
+  print STDERR $all_exec_code if $options{verbose} > 2;
   return eval_code($all_exec_code, 'exec');
 }
 
-sub create_wrapped_sub_executor {
+sub run_wrapped_sub {
   my ($wrapped_code, $flag) = @_;
-  return sub {
-    # Instead of using our local variables, we could share the real one here:
-    # $safe->share_from('File::Find', ['$dir', '$name']);
-    # They have to be shared inside the sub as they are 'localized' each time.
-    # That approach would be slower by a small factor though.
-    $dir_setter->set($File::Find::dir);
-    $name_setter->set($File::Find::name);
-    $wrapped_code->();
-    die "Failure in the code given to --${flag}: $!\n" if $!;
-    return @_;
-  }
+  # Instead of using our local variables, we could share the real one here:
+  # $safe->share_from('File::Find', ['$dir', '$name']);
+  # They have to be shared inside the sub as they are 'localized' each time.
+  # That approach would be slower by a small factor though.
+  $dir_setter->set($File::Find::dir);
+  $name_setter->set($File::Find::name);
+  undef $!;
+  $wrapped_code->();
+  die "Failure in the code given to --${flag}: $!\n" if $!;
 }
 
 sub Run {
@@ -145,9 +194,15 @@ sub Run {
   GetOptionsFromArray(\@inputs, all_options())
     or pod2usage(-exitval => 2, -verbose => 0);
     
+  # With this the -v option (--verbose) will still trigger the behavior of the
+  # --version option (although it won't stop the execution).
+  Getopt::Long::VersionMessage({-exitval => 'NOEXIT', -output => \*STDERR}) if $options{verbose};
+    
   if (not @{$options{exec}}) {
     $options{exec} = ['print'];
   }
+  
+  print STDERR "options = ".Dumper({%options}) if $options{verbose} > 1;
   
   if ($options{follow} && $options{follow_fast}) {
     die "The --follow and --follow-fast options cannot be used together.\n";
@@ -166,28 +221,36 @@ sub Run {
     eval_code($c, 'BEGIN');
   }
   
-  my $wrapped_exec = wrap_code_blocks($options{exec}, '$_');
+  my $wrapped_exec = wrap_code_blocks($options{exec}, '$_', 'exec');
   # The $_ variable inside these method will be set to $File::Find::dir (as the
   # real $_ does not contain anything useful in that case).
-  my $pre_option;
+  my $wrapped_pre;
   if (@{$options{pre}}) {
-    my $wrapped_pre = wrap_code_blocks($options{pre}, '$internal_pfind_dir');
-    $pre_option = create_wrapped_sub_executor($wrapped_pre, 'pre-process');
+    $wrapped_pre = wrap_code_blocks($options{pre}, '$internal_pfind_dir', 'pre');
   }
-  my $post_option;
+  my $wrapped_post;
   if (@{$options{post}}) {
-    my $wrapped_post = wrap_code_blocks($options{post}, '$internal_pfind_dir');
-    $post_option = create_wrapped_sub_executor($wrapped_post, 'post-process');
+    $wrapped_post = wrap_code_blocks($options{post}, '$internal_pfind_dir', 'post');
   }
-  
+
   find({
     bydepth => $options{depth_first},
     follow => $options{follow},
     follow_fast => $options{follow_fast},
     no_chdir => !$options{chdir},
-    wanted => create_wrapped_sub_executor($wrapped_exec, 'exec'),
-    preprocess => $pre_option,
-    postprocess => $post_option,
+    wanted => sub {
+      print STDERR "Looking at file: $File::Find::name" if $options{verbose};
+      run_wrapped_sub($wrapped_exec, 'exec');
+    },
+    preprocess => sub {
+      print STDERR "Entering: $File::Find::dir" if $options{verbose};
+      run_wrapped_sub($wrapped_pre, 'pre-process') if $wrapped_pre;
+      return @_;  # Needed by find().
+    },
+    postprocess => sub {
+      print STDERR "Exiting: $File::Find::dir" if $options{verbose};
+      run_wrapped_sub($wrapped_post, 'post-process') if $wrapped_post;
+    }
   }, @inputs);
 
   for my $c (@{$options{end}}) {
