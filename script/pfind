@@ -104,7 +104,7 @@ upper-case to reverse its meaning (excluding the files of that type).
 When a file is filtered, the code given to B<--exec> will not be executed for
 that file but, if this file is a directory, the B<--pre> and B<--post> code will
 still execute. Filtering directories will also not prevent from recursing in
-them.
+them (you can use the B<--no-recurse> option for that).
 
 =item B<-f>, B<--follow>
 
