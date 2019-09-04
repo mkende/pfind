@@ -266,6 +266,10 @@ sub Run {
   if (join('', keys %{$options{type}}) !~ /^[fdlpsbc]*$/) {
     die "Unsupported value for the --type option.\n";
   }
+  if (not @inputs) {
+    print STDERR "No input given on the command-line. Exiting without doing any work.";
+    exit 1;
+  }
 
   $\ = $options{print};
   
