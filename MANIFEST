@@ -1,5 +1,5 @@
+lib/App/Pfind.pm
 LICENSE
 Makefile.PL
 MANIFEST
-README.pod
 script/pfind

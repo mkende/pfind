@@ -5,7 +5,6 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
     NAME             => 'App::Pfind',
-    DISTNAME         => 'Pfind',
     AUTHOR           => q{Mathias Kende <mathias@cpan.org>},
     VERSION_FROM     => 'lib/App/Pfind.pm',
     ABSTRACT         => 'A Perl based find replacement',

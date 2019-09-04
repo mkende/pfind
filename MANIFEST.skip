@@ -1,11 +1,12 @@
 .git/
 .gitignore
-Pfind-*
+App-Pfind-*
 blib/
 Makefile$
 Makefile.old
 MANIFEST.bak
 MANIFEST.skip
 MYMETA.*
+README.pod
 pm_to_blib
 workspace.npp
