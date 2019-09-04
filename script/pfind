@@ -136,6 +136,13 @@ Print the argument of this function after each call of the Perl C<print>
 function. This defaults to a new-line. Technically this option is setting the
 C<$\> variable in Perl.
 
+=item B<--no-recurse>, B<-nor>
+
+Do not recurse into directories given on the command line. These directories are
+still processed like normal files but not their content.
+
+This option cannot be used when B<--depth-first> is passed.
+
 =item B<-B> I<code>, B<--BEGIN>
 
 Specify a piece of code that is executed before starting to crawl the

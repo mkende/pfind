@@ -109,6 +109,8 @@ sub reset_options {
   $options{follow} = 0;
   # Whether to follow the symlinks using a fast method that may process some files twice.
   $options{follow_fast} = 0;
+  # Whether to recurse in directories.
+  $options{recurse} = 1;
   # Blocks of code to execute before the main loop
   $options{begin} = [];
   # Blocks of code to execute after the main loop
@@ -136,6 +138,7 @@ sub all_options {(
   'depth-first|depth|d!' => \$options{depth_first},
   'follow|f!' => \$options{follow},
   'follow-fast|ff!' => \$options{follow_fast},
+  'recurse|r!' => \$options{recurse},
   'type|t=s@' => $options{type},
   'chdir!' => \$options{chdir},
   'print|p=s' => \$options{print},
@@ -189,6 +192,19 @@ sub run_wrapped_sub {
   die "Failure in the code given to --${flag}: $!\n" if $!;
 }
 
+# Perform a real-stat or just reads the result from the previous stat. Returns
+# just the mode part of the stat.
+my $last_stated_file = '';
+sub cheap_stat {
+  my ($relative_file_name, $full_file_name) = @_;
+  return (stat(_))[2] if $full_file_name eq $last_stated_file;
+  $last_stated_file = $full_file_name;
+  # When executing find in follow mode, the current file has already been
+  # stat-ed (this is guaranteed by find), so we can re-use the value using `_`.
+  return (stat(_))[2] if $options{follow} || $options{follow_fast};
+  return (stat($relative_file_name))[2];
+}
+
 my %file_mode = (
     f => S_IFREG,   # regular file
     d => S_IFDIR,   # directory
@@ -203,9 +219,7 @@ my %file_mode = (
 sub should_skip_file {
   my ($relative_file_name, $full_file_name) = @_;
   return 0 unless %{$options{type}};
-  # When executing find in follow mode, the current file has already been
-  # stat-ed (this is guaranteed by find), so we can re-use the value using `_`.
-  my (undef, undef, $mode) = ($options{follow} || $options{follow_fast}) ? stat(_) : stat($relative_file_name);
+  my $mode = cheap_stat($relative_file_name, $full_file_name);
   for my $m (keys(%{$options{type}})) {
     if (($mode & $file_mode{$m}) xor $options{type}{$m}) {
       print STDERR "Skipping '$full_file_name' due to '$m' type" if $options{verbose};
@@ -229,7 +243,7 @@ sub Run {
   Getopt::Long::VersionMessage({-exitval => 'NOEXIT', -output => \*STDERR}) if $options{verbose};
     
   if (not @{$options{exec}}) {
-    $options{exec} = ['print'];
+    $options{exec} = ['print $name'];
   }
   
   $options{type} = { map { lc() => ($_ eq lc()) } split(//, join('', @{$options{type}})) };
@@ -246,7 +260,10 @@ sub Run {
   if (@{$options{post}} && $follow_mode) {
     die "The --post-process option cannot be used with --follow or --follow-fast.\n";
   }
-  if (join('', keys %{$options{type}}) !~ /^[fdlpsbc]+$/) {
+  if (not $options{recurse} and $options{depth_first}) {
+    die "The --no-recurse option cannot be used with --depth-first.\n";
+  }
+  if (join('', keys %{$options{type}}) !~ /^[fdlpsbc]*$/) {
     die "Unsupported value for the --type option.\n";
   }
 
@@ -274,6 +291,10 @@ sub Run {
     follow_fast => $options{follow_fast},
     no_chdir => !$options{chdir},
     wanted => sub {
+      if (not $options{recurse} and cheap_stat($_, $File::Find::name) & S_IFDIR) {
+        print "Will not recurse into $File::Find::name" if $options{verbose};
+        $File::Find::prune = 1;
+      }
       print STDERR "Looking at file: $File::Find::name" if $options{verbose};
       return if should_skip_file($_, $File::Find::name);
       run_wrapped_sub($wrapped_exec, 'exec');
