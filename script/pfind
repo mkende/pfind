@@ -307,7 +307,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 =head1 SEE ALSO
 
-L<perl(1)>, L<find(1)>, L<exec(1)>,
+L<perl(1)>, L<find(1)>, L<xargs(1)>,
 L<File::Find|https://perldoc.perl.org/file/find.html>
 
 =cut
