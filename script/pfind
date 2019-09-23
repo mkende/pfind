@@ -232,6 +232,11 @@ a lis of files or directories and delete them all recursively. Use with caution!
 
 If no arguments are passed, use C<$_>.
 
+=item C<basename> and C<dirname>
+
+These functions (coming from the L<File::Basename> module) returns respectively
+the last file name in a path (which may be a directory) or the path without it
+last file name (similar to the L<basename(1)> and L<dirname(1)> command).
 =back
 
 =head1 EXAMPLES

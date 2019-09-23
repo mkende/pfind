@@ -24,7 +24,7 @@ installed. It usually comes in a B<perl-doc> package on most systems.
 
 Building and installing this program only requires Perl modules from the
 standard library. So as long as you have Perl installed (which should be the
-case by default on almost all system), you should be able to install ptp using
+case by default on almost all system), you should be able to install pfind using
 one of the method below. This program requires Perl version 5.22 or above. You
 can check which Perl you have installed with the following command:
 

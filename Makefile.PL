@@ -1,4 +1,4 @@
-use 5.018;
+use 5.022;
 use strict;
 use warnings;
 use ExtUtils::MakeMaker;
@@ -57,5 +57,5 @@ WriteMakefile(
       },
     },
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
-    clean => { FILES => 'Pfind-*' },
+    clean => { FILES => 'App-Pfind-*' },
 );

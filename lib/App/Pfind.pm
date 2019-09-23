@@ -97,8 +97,9 @@ sub rmtree(_;@) {
 sub reset_options {
   $safe = Safe->new();
   $safe->deny_only(':ownprocess', ':others', ':dangerous');
-  $safe->reval('use File::Spec::Functions qw(:ALL);');
+  $safe->reval('use File::Basename;');
   $safe->reval('use File::Copy qw(cp mv)');
+  $safe->reval('use File::Spec::Functions qw(:ALL);');
   $safe->share('$internal_pfind_dir', '$internal_pfind_name', 'prune', 'mkdir',
                'rmdir', 'rm', 'rmtree');
   $safe->share_from('main', ['*STDERR']);
@@ -146,7 +147,8 @@ sub all_options {(
   'end|END|E=s@' => $options{end},
   'pre|pre-process=s@' => $options{pre},
   'post|post-process=s@' => $options{post},
-  'exec|e=s@' => $options{exec},
+  'exec|e=s' => sub { push @{$options{exec}}, ['exec', $_[1]] },
+  'shell|s=s' => sub { push @{$options{exec}}, ['shell', $_[1]] },
   'verbose|v|V+' => \$options{verbose},
 )}
 
@@ -167,7 +169,7 @@ sub wrap_code_blocks {
   # addition, control flow keywords (mainly next, redo and return) can be used
   # in each block.
   my $block_start = '{ my $tmp_pfind_default = '.$default_variable_value.'; ';
-  $block_start .= "print { *STDERR } 'Executing code $flag:'.\$internal_pfind_block_count++;" if $options{verbose};
+  $block_start .= "print { *STDERR } 'Executing code --$flag:'.\$internal_pfind_block_count++;" if $options{verbose};
   $block_start .= 'local $_ = $tmp_pfind_default;'
                   .'local $dir = $internal_pfind_dir;'
                   .'local $name = $internal_pfind_name;';
@@ -176,7 +178,7 @@ sub wrap_code_blocks {
                       .${block_start}.join("${block_end} \n ${block_start}", @$code_blocks).${block_end}
                       .' }';
   print STDERR $all_exec_code if $options{verbose} > 2;
-  return eval_code($all_exec_code, 'exec');
+  return eval_code($all_exec_code, $flag);
 }
 
 sub run_wrapped_sub {
@@ -229,6 +231,23 @@ sub should_skip_file {
   return 0;
 }
 
+# Take the double array with exec or shell command and return only Perl commands.
+sub prepare_exec {
+  my ($cmds) = @_;
+  my @output;
+  for my $cmd (@$cmds) {
+    if ($cmd->[0] eq 'exec') {
+      push @output, $cmd->[1];
+    } else {
+      die "Internal error (unexpected command).\n" unless $cmd->[0] eq 'shell';
+      my $str_cmd = Dumper($cmd->[1]);
+      print STDERR "Wrapping --shell into: $str_cmd" if $options{verbose};
+      push @output, "\$cmd = $str_cmd; \$cmd =~ s/{}/\$_/g; system(\$cmd);";
+    }
+  }
+  return @output;
+}
+
 sub Run {
   my ($argv) = @_;
   
@@ -243,7 +262,7 @@ sub Run {
   Getopt::Long::VersionMessage({-exitval => 'NOEXIT', -output => \*STDERR}) if $options{verbose};
     
   if (not @{$options{exec}}) {
-    $options{exec} = ['print $name'];
+    $options{exec} = [['exec', 'print $name']];
   }
   
   $options{type} = { map { lc() => ($_ eq lc()) } split(//, join('', @{$options{type}})) };
@@ -277,7 +296,9 @@ sub Run {
     eval_code($c, 'BEGIN');
   }
   
-  my $wrapped_exec = wrap_code_blocks($options{exec}, '$_', 'exec');
+  my @exec_code = prepare_exec($options{exec});
+  
+  my $wrapped_exec = wrap_code_blocks(\@exec_code, '$_', 'exec or --shell');
   # The $_ variable inside these method will be set to $File::Find::dir (as the
   # real $_ does not contain anything useful in that case).
   my $wrapped_pre;
