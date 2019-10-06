@@ -341,3 +341,9 @@ sub Run {
 }
 
 1;
+
+=head1 NAME
+
+App::Pfind - A Perl based find replacement.
+
+=cut
